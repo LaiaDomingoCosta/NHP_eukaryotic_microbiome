@@ -1,0 +1,60 @@
+---
+title: "Graphical Abstract"
+author: "Laia Domingo Costa"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library("rnaturalearth")
+library("rnaturalearthdata")
+library("ggplot2")
+```
+
+## Map of Non Human Primates
+
+```{r}
+# Load the world map
+world = ne_countries(scale = "medium", returnclass = "sf")
+
+# Set the countries of the study
+NHP_countries=c("Côte d'Ivoire", "Germany", "Dem. Rep. Congo","Gabon", "Uganda", "United States of America","Czechia","South Africa", "Vietnam", "Austria","Tanzania","China","Kenya","Cameroon","Netherlands","Singapore","Argentina", "Nicaragua", "Mexico", "Colombia", "Ecuador", "Uganda", "Madagascar", "Central African Rep.", "Ethiopia", "Congo")
+NHPCountries = world$name %in% NHP_countries
+
+# Plot
+ggplot(data = world) +
+  geom_sf(aes(fill = NHPCountries)) +
+  scale_fill_manual(values = c("TRUE" = "#F87666", "FALSE" = "#EBEBEB")) +
+  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5),
+        panel.background = element_rect(fill = "#EBEBEB"),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none")
+
+ggsave("./Graficas/NHP_map.png",height = 8, width = 18,dpi=600)
+```
+
+## Map of Non Human Primates and Humans
+
+```{r}
+# Set the countries of the study
+H_countries=c("Sweden","Fiji","Nepal","Tanzania","Brazil","Italy","Colombia","India","Australia","Cameroon","Austria","Russia","Singapore","Argentina","Spain","United Kingdom","United States of America","Burkina Faso","South Korea","Kazakhstan","Denmark","Bangladesh","Mongolia","Japan","Peru","Madagascar","El Salvador","Canada","Netherlands","Luxembourg","Central African Rep.","Ireland","Gabon","Germany","Vietnam","South Africa","Malaysia","Ethiopia","Ghana","China","Guinea-Bissau","Mexico","Israel","France")
+HCountries = world$name %in% H_countries
+
+# Group the countries by its presence in the studies
+Datasets = ifelse(NHPCountries & HCountries, "Both", ifelse(NHPCountries, "NonHumanPrimates", ifelse(HCountries, "Human", "None")))
+
+# Plot
+ggplot(data = world) +
+  geom_sf(aes(fill = Datasets)) +
+  scale_fill_manual(values = c("Both" = "#210B2C", "NonHumanPrimates" = "#F87666", "Human" = "#598392", "None" = "#EBEBEB")) +
+  coord_sf(xlim = c(-180, 180), ylim = c(-60, 90), expand = FALSE) +
+  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5),
+        panel.background = element_rect(fill = "#EBEBEB"),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank())
+
+ggsave("./Graficas/world_map.png",height = 8, width = 18,dpi=600)
+```

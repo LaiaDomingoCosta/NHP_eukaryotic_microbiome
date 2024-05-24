@@ -1,0 +1,102 @@
+---
+title: "NHP_proportions_groups"
+author: "Laia Domingo Costa"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(ComplexHeatmap)
+library(dplyr)
+library(RColorBrewer)
+library(ggplot2)
+library(reshape2)
+library(tidyverse)
+```
+
+## Load metadata
+
+```{r}
+data = read.csv("DATA/Metadata_concat_final_euk.tsv", sep = "\t",  na.strings=c("","NA"))
+```
+
+## Distribution of samples and NHP species across countries
+
+```{r}
+# Distribution of samples across countries
+data %>% summarise(distinct(., individual_id, .keep_all = TRUE)) %>% count(country) %>% as.data.frame()
+# Distribution of NHP species across countries
+data %>% group_by(country) %>% count(host_specie) %>% tally() %>% as.data.frame()
+```
+
+## Extract metadata of interest by individual
+
+```{r}
+metadata_interest = data[,c("individual_id","continent","host_lifestyle","primate_group","season","host_sex")]
+metadata_ind_interest = metadata_interest %>% group_by(individual_id) %>% summarise(across(everything(), unique), .groups = 'drop') %>% as.data.frame()
+```
+
+## Stacked barplot
+
+```{r}
+# Remove the individual_id
+metadata_ind_interest <- subset(metadata_ind_interest, select = -1)
+# Extract the number of individuals in every variable
+result <- metadata_ind_interest %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value") %>%
+  group_by(variable, value) %>%
+  summarise(count = n())
+# Calcule of the proportion of these variables
+frec_tab_ind <- result %>%
+  mutate(relative_frequency = (count / 607) * 100)
+colnames(frec_tab_ind) = c("variable", "factor", "value", "frequency")
+frec_tab_ind = frec_tab_ind %>% na.omit()
+
+# Define colour palette
+continent_palette <- c("Africa" = "#FFFB7E", "Asia" = "#9F96FF", "Europe" = "#596556", "America" = "#F9F4FF")
+lifestyle_palette <- c("Intermediate" = "#FAF5FF", "Wild" = "#F5A9B8", "Captive" = "#5BCEFA")
+primate_group_palette <- c("Prosimian-Lemuriformes" = "#ffc6ff", "Prosimian-Lorisiformes" = "#bdb2ff","Tarsiiformes" = "#a0c4ff","Simiformes-New World Monkeys" = "#fdffb6","Simiformes-Old World Monkeys-Cercopithecines" = "#ffd6a5","Simiformes-Old World Monkeys-Colobines" = "#ffadad","Simiformes-Lesser Apes" = "#caffbf", "Simiformes-Great Apes" = "#9bf6ff")
+season_palette <- c("Wet" = "#D0F4DE", "Dry" = "#FCF6BD")
+sex_palette <- c("Male" = "#A9DEF9", "Female" = "#FF99C8")
+
+# Create the Percent Stacked Barplot
+ggplot(frec_tab_ind, aes(x = variable, y = frequency, fill = factor)) +
+  geom_bar(position="stack", stat="identity") +
+  labs(y = "Non Human Primate gut datasets by individual (%)") +
+  xlab(NULL) + 
+  scale_x_discrete(labels = c("Continent", "Life style", "Sex", "Primate Group", "Season")) +
+  theme_minimal() +
+  scale_fill_manual(values = c(continent_palette, lifestyle_palette, primate_group_palette, season_palette, sex_palette)) +
+  theme(legend.position="None")
+ggsave("./Graficas/stack_individual.png", bg="white", dpi = 300, width = 2000, height = 1600, units = "px")
+```
+
+## Legend
+
+```{r}
+# Create legend
+colour = c("#FFFB7E", "#9F96FF", "#596556", "#F9F4FF")
+continent_legend = Legend(legend_gp = gpar(fill = colour), title = "Continent", labels = c("Africa", "Asia", "Europe", "America"))
+
+colour = c("#FAF5FF", "#F5A9B8", "#5BCEFA")
+lifestyle_legend = Legend(legend_gp = gpar(fill = colour), title = "Life style", labels = c("Intermediate", "Wild", "Captive"))
+
+colour = c("#ffc6ff", "#bdb2ff", "#a0c4ff", "#fdffb6", "#ffd6a5","#ffadad","#caffbf","#9bf6ff")
+primate_group_legend = Legend(legend_gp = gpar(fill = colour), title = "Primate Group", labels = c("Prosimian-Lemuriformes", "Prosimian-Lorisiformes","Tarsiiformes","Simiformes-New World Monkeys","Simiformes-Old World Monkeys-Cercopithecines","Simiformes-Old World Monkeys-Colobines","Simiformes-Lesser Apes", "Simiformes-Great Apes"))
+
+colour = c("#D0F4DE", "#FCF6BD")
+season_legend = Legend(legend_gp = gpar(fill = colour), title = "Season", labels = c("Wet",  "Dry"))
+
+colour = c("#A9DEF9", "#FF99C8")
+sex_legend = Legend(legend_gp = gpar(fill = colour), title = "Sex", labels = c("Male", "Female"))
+
+
+pd = packLegend(continent_legend, lifestyle_legend, sex_legend, primate_group_legend, season_legend, direction = "horizontal")
+
+# Convert to ggplot
+pd = grid.grabExpr(draw(pd))
+ggpubr::as_ggplot(pd)
+ggsave("./Graficas/legend.png", bg = "white", dpi = 300, width = 2500, height = 1600, units = "px")
+```
