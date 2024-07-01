@@ -1,0 +1,126 @@
+---
+title: "Differential abundance analysis"
+author: "Laia Domingo Costa"
+format: html
+editor: visual
+---
+
+Load packages
+
+```{r}
+library(ANCOMBC)
+library(tidyverse)
+library(phyloseq)
+```
+
+Load data
+
+```{r}
+sgb_tax <-read.table("DATA/NHP_7jun2024_metaphlan_sp_gtdb_taxonomy_corrected.tsv",row.names = 1, sep = '\t',header = T)
+sgb_abundance <-read.table("DATA/NHP_7jun2024_metaphlan_sp_gtdb_rel_abund_perc.tsv",row.names = 1, sep = '\t',header = T)
+metadata = read_delim("DATA/merged_NHP_7jun2024_concatenated_final_metadata.tsv", delim = "\t", escape_double = FALSE, trim_ws = TRUE, show_col_types = FALSE)
+euk = read.table("DATA/nhp_13jun2024_euk_presence_absence_genus_table_def.tsv",row.names = 1, sep = '\t',header = T, check.names = FALSE)
+taxonomy_genus_table = read.csv("DATA/nhp_13jun2024_euk_taxonomy_genus_table.tsv", sep = "\t")
+```
+
+Extracts the presence/absence of the eukaryotes
+
+```{r}
+final_tax_names=c()
+for (taxid in names(euk)) {
+  temp_taxonomy = taxonomy_genus_table[taxonomy_genus_table$TaxID==taxid,]
+  final_tax_names = c(final_tax_names, temp_taxonomy$genus)
+}
+final_tax_names[35] = "Candida2"
+names(euk) <- final_tax_names
+euk$sample_name = rownames(euk)
+metadata_euk = left_join(metadata, euk, by="sample_name")
+```
+
+Perform the differential abundance analysis
+
+```{r}
+for (eukaryote in final_tax_names){
+  # Run the differential abundance analisis on every posible NHP specie for the eukariote of interest
+  for (sp in unique(metadata$host_specie)) {
+    metadata_sp = metadata_euk %>% filter(host_specie == sp)
+    sgb_abundance_sp = sgb_abundance[,metadata_sp$sample_name]
+    
+    # Check if there are, at least, 5 samples, 30% of them with presence of the eukariote and 2 samples in the control group
+    if (nrow(metadata_sp) >= 5 & sp != "Pongo abelii" & sum(metadata_sp[,eukaryote] == 0) >=2 & (sum(metadata_sp[,eukaryote]) / nrow(metadata_sp)) >= 0.3){
+      print(paste("Eukaryote:", eukaryote))
+      print(paste("NHP species:", sp))
+      print(paste("N samples:", nrow(metadata_sp)))
+      #Get info as phyloseq object
+      TAXA=tax_table(as.matrix(sgb_tax))
+      RELAB=otu_table(as.matrix(sgb_abundance_sp),taxa_are_rows = T)
+      METAD=sample_data(metadata_sp)
+      rownames(METAD)=METAD$sample_name
+      #Transform to phyloseq object 
+      pseq=phyloseq(RELAB,METAD,TAXA)
+      # Transform the data to SummarizedExperiment
+      se = mia::makeTreeSummarizedExperimentFromPhyloseq(pseq)
+      
+      # Run the ANCOMBC2
+      # Especifying the procendence of the data(SummarizedExperiment = counts), the tax level of study is the genus, the adjustment of the p_value is made using the Holm-Bonferroni method, the variability is explained by the country (colinear with the host_lifestyle), if needed, and the presence/absence of the eukariote and an alpha of 0.05.
+      if (length(unique(metadata_sp$country)) > 1 & all(table(metadata_sp$country) >= 2)){
+        set.seed(123)
+        output = ancombc2(data = se, assay_name = "counts", tax_level = "genus",
+                          p_adj_method = "holm", pseudo_sens = TRUE,
+                          fix_formula = paste(eukaryote,"+ country"),
+                          group = eukaryote, struc_zero = TRUE,
+                          prv_cut = 0.10, s0_perc = 0.05,
+                          alpha = 0.05, n_cl = 6, verbose = TRUE)
+      }
+      else {
+        set.seed(123)
+        output = ancombc2(data = se, assay_name = "counts", tax_level = "genus",
+                          p_adj_method = "holm", pseudo_sens = TRUE,
+                          fix_formula = eukaryote,
+                          group = eukaryote, struc_zero = TRUE,
+                          prv_cut = 0.10, s0_perc = 0.05,
+                          alpha = 0.05, n_cl = 6, verbose = TRUE)
+      }
+      
+      # Take the result
+      res_prim = output$res
+      save(res_prim, file=paste(gsub(" ", "_", sp),"_",eukaryote,"_result.Rdata", sep = ""))
+
+      ### Create the figure
+      # Select the variable result
+      df = res_prim %>%
+          dplyr::select(taxon, contains(eukaryote))
+      # Filter the p.adj greater than 0.5, in descending order,
+      # determine the LFC and color the samples that passed the sensitivity test
+      df_fig = df %>%
+          dplyr::filter(!!sym(paste("q_",eukaryote,"1", sep = "")) < 0.5) %>% 
+          dplyr::arrange(desc(!!sym(paste("lfc_",eukaryote,"1", sep = "")))) %>%
+          dplyr::mutate(direct = ifelse(!!sym(paste("lfc_",eukaryote,"1", sep = "")) > 0,
+                                        "Positive LFC", "Negative LFC"),
+                        color = ifelse(!!sym(paste("passed_ss_",eukaryote,"1", sep = "")) == 1,
+                                       "aquamarine3", "black"))
+      # 
+      df_fig$taxon = factor(df_fig$taxon, levels = df_fig$taxon)
+      df_fig$direct = factor(df_fig$direct, 
+                                 levels = c("Positive LFC", "Negative LFC"))
+      
+      fig = df_fig %>%
+          ggplot(aes(x = taxon, y = !!sym(paste("lfc_",eukaryote,"1", sep = "")), fill = direct)) + 
+          geom_bar(stat = "identity", width = 0.7, color = "black", 
+                   position = position_dodge(width = 0.4)) +
+          geom_errorbar(aes(ymin = !!sym(paste("lfc_",eukaryote,"1", sep = "")) - !!sym(paste("se_",eukaryote,"1", sep = "")),
+                            ymax = !!sym(paste("lfc_",eukaryote,"1", sep = "")) + !!sym(paste("se_",eukaryote,"1", sep = ""))), width = 0.2, position = position_dodge(0.05), color = "black") + 
+          labs(x = "Prokaryote genus", y = "Log fold change") + 
+          scale_fill_discrete(name = NULL) +
+          scale_color_discrete(name = NULL) +
+          theme_bw() + 
+          theme(plot.title = element_text(hjust = 0.5),
+                panel.grid.minor.y = element_blank(),
+                axis.text.x = element_text(angle = 60, hjust = 1,
+                                           color = df_fig$color))
+      ggsave(paste(gsub(" ", "_", sp),"_",eukaryote,".png", sep = ""), fig)
+      save(fig, file=paste(gsub(" ", "_", sp),"_",eukaryote,".Rdata", sep = ""))
+    }
+  }
+}
+```

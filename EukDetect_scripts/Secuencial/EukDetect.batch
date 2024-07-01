@@ -1,0 +1,53 @@
+#!/bin/bash
+#SBATCH --qos=medium
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=30gb
+#SBATCH --time=7-00:00:00
+
+
+echo "$INPUT_DIR"
+echo "$OUTPUT_DIR"
+echo "$EUK_DB"
+echo "$EUK_DIR"
+
+#Load anaconda module
+module load anaconda3_2022.10
+
+#Load conda env
+source activate eukdetect
+conda info
+
+if [[ "$TYPE" = "SE" ]]; then
+	library_layout="false"
+else
+	library_layout="true"
+fi
+
+echo $library_layout
+#Run the program that generates the configfile
+python3 generate_configfile.py	-i $INPUT_DIR \
+				-l $library_layout \
+				-r $LENGTH \
+				-o1 $OUTPUT_DIR/Euk_output \
+				-o2 $OUTPUT_DIR \
+				-d $EUK_DB \
+				-e $EUK_DIR
+
+#Path to configfile generate
+CONFIGFILE=$OUTPUT_DIR/configfile.txt
+
+#Run snakemake
+snakemake --snakefile $SNAKEFILE --configfile $CONFIGFILE --cores 16 runall
+
+rm -r $OUTPUT_DIR/Euk_output/aln
+rm -r $OUTPUT_DIR/Euk_output/filtering
+
+#End script
+echo "End Script! Bye!"
+
+
+
+
+
+

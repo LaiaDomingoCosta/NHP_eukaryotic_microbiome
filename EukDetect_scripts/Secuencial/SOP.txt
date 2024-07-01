@@ -1,0 +1,28 @@
+Purpose
+
+The purpose of this standard operating procedure is to establish a guideline for the execution of all scripts involved in the processing of metagenomics samples with the EukDetect tool.
+
+Application
+
+Reproduce as much as possible the analysis procedure with the EukDetect tool to facilitate processing by other users.
+
+Procedure steps
+
+1. Execution of EukDetect.batch that calls the program generate_configfile.py to create the configfile.
+
+	- First of all, in this script you have to set the parameters to use garnatxa.
+
+	- Then set the parameters and paths to be entered in the generate_configfile.py program.
+
+	- Next, you have to provide the path to the rules/eukdetect.rules file, needed to specify the execution mode, in this case the runall. The use of snakemake is due to the fact that it is the recommended
+	method for working in a cluster. 
+
+	- Finally, enter the path where the configfile was saved.
+
+2. Execution of pres-abs_matrix_and_taxonomy.batch which calls the pres-abs_matrix_and_taxonomy.py program to create the final presence-absence and taxonomy tables for the identified eukaryotic organisms.
+
+	- As in the previous script, you have to configure the parameters to use garnatxa.
+
+	- Finally, set the parameters and paths to be entered in the abs_matrix_and_taxonomy.py program.
+
+3. The execution in garnatxa must be done in the order described above, using the command to launch the batch scripts.

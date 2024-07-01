@@ -19,7 +19,7 @@ library(tidyverse)
 ## Load metadata
 
 ```{r}
-data = read.csv("DATA/Metadata_concat_final_euk.tsv", sep = "\t",  na.strings=c("","NA"))
+data = read.csv("DATA/merged_NHP_7jun2024_concatenated_final_metadata.tsv", sep = "\t",  na.strings=c("","NA"))
 ```
 
 ## Distribution of samples and NHP species across countries

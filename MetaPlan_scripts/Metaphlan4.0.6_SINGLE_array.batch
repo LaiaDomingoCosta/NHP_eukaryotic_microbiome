@@ -1,0 +1,72 @@
+#!/bin/bash
+#SBATCH --qos=medium
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=20gb
+#SBATCH --time=7-00:00:00
+
+#1. Echo paths
+echo "Metaphlan SE:"
+echo "INPUT_DIR:" $INPUT_DIR
+echo "OUTPUT_DIR:" $OUTPUT_DIR
+echo "metaphlan_DB_DIR:" $metaphlan_DB_DIR
+echo "metaphlan_INDEX:" $metaphlan_INDEX
+echo "GTDB_PROFILE_DB:" $GTDB_PROFILE_DB
+
+#2. Load env
+##Load anaconda module
+module load anaconda
+
+##Load conda env
+source activate metaphlan4.0.6
+conda info
+conda list
+
+#3. Preparation
+##Get files variable(PAIRED FILES)
+FILES=($(ls $INPUT_DIR/*.fastq.gz | grep -v "_1.fastq.gz" | grep -v "_2.fastq.gz"))
+F1=${FILES[$SLURM_ARRAY_TASK_ID]}
+
+##Set sample name BASE variable
+BASE=$(basename $F1 _qc_fHP.fastq.gz)
+
+##Create outputdir
+mkdir ${OUTPUT_DIR}/${BASE}
+
+##Output names
+profile_relabs=${OUTPUT_DIR}/${BASE}/${BASE}"_profile.tsv"
+profile_relabs_stats=${OUTPUT_DIR}/${BASE}/${BASE}"_rel_ab_w_read_stats.tsv"
+gtdb_profile=${OUTPUT_DIR}/${BASE}/${BASE}"_profile_gtdb.tsv"
+bowtie2out_file=${OUTPUT_DIR}/${BASE}/${BASE}".bowtie2.bz2"
+
+#4. Run Metaphlan
+
+##Show start message
+echo "Processing Sample...${BASE}[Start]"
+
+##Metaphlan Run profile_relabs
+echo "Metaphlan Run [profile_relabs]..."
+metaphlan ${F1} \
+--nproc ${SLURM_CPUS_PER_TASK} \
+--input_type fastq \
+--bowtie2db ${metaphlan_DB_DIR} \
+--index ${metaphlan_INDEX} \
+--bowtie2out ${bowtie2out_file} \
+-o ${profile_relabs}
+	
+##Metaphlan Run profile_relabs_stats
+echo "Metaphlan Run [profile_relabs_stats]..."
+metaphlan ${bowtie2out_file} \
+--nproc ${SLURM_CPUS_PER_TASK} \
+--input_type bowtie2out \
+--bowtie2db ${metaphlan_DB_DIR} \
+--index ${metaphlan_INDEX} \
+-t rel_ab_w_read_stats \
+-o ${profile_relabs_stats}
+	
+##Get gtdb profile
+echo "Metaphlan Run [gtdb_profile]..."
+sgb_to_gtdb_profile.py -i ${profile_relabs} -d ${GTDB_PROFILE_DB} -o ${gtdb_profile}
+	
+##Show end message
+echo "Processing Sample...${BASE}[End]"

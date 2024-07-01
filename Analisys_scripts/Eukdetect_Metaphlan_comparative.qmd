@@ -1,0 +1,64 @@
+---
+title: "Comparation Eukdetect VS Metaphlan"
+author: "Laia Domingo Costa"
+format: html
+editor: visual
+---
+
+# Load libraries
+
+```{r}
+library(ggplot2)
+```
+
+# Load data
+
+## Metaphlan
+
+```{r}
+metaplhan = read.csv("DATA/NHP_7jun2024_metaphlan_sp_gtdb_rel_abund_perc.tsv", sep = "\t")
+# Get eukaryotes data only
+condition = grepl("EUK.*", metaplhan$X)
+rownames(metaplhan) = metaplhan$X
+# Remove sample name column
+metaplhan = metaplhan[,-1]
+metaplhan = metaplhan[condition,]
+# Remove non detected taxa
+metaplhan = metaplhan[, colSums(metaplhan != 0) > 0]
+```
+
+## Eukdetect
+
+```{r}
+eukdetect = read.csv("DATA/nhp_13jun2023_euk_presence_absence_species_table_def.tsv", sep = "\t")
+rownames(eukdetect) = eukdetect$Sample
+# Remove sample name column
+eukdetect = eukdetect[,-1]
+# Remove non detected taxa
+eukdetect = eukdetect[rowSums(eukdetect != 0) > 0, ]
+```
+
+# Perform comparation
+
+```{r}
+# Create presence/absence data frames
+M = data.frame(samples = colnames(metaplhan), species = colSums(metaplhan != 0))
+M$Program = "Metaphlan"
+E = data.frame(samples = rownames(eukdetect), species = rowSums(eukdetect != 0))
+E$Program = "EukDetect"
+
+# Concatenate data frames
+df_combined <- rbind(M, E)
+rownames(df_combined) = NULL
+
+# Histogram
+ggplot(df_combined, aes(x = samples, y = species, fill = Program)) +
+  geom_col(position = "identity", alpha = 0.7) +
+  labs(x = "Samples",
+       y = "Number of species") +
+  scale_fill_manual(values = c("Metaphlan" = "blue", "EukDetect" = "red")) +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+ggsave("EukdetectVSMetaphlan.png", width = 10, height = 6, units = "in", bg = "white")
+```
