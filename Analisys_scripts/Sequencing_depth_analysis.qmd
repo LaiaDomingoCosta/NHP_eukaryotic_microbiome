@@ -1,6 +1,6 @@
 ---
 title: "Sequencing depth analysis"
-author: "Laia Domingo Costa"
+author: "Laia Domingo Costa/Enrique Roig Tormo"
 format: html
 editor: visual
 ---
