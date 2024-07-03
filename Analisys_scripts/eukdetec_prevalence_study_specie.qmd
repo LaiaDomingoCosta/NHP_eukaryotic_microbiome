@@ -1,6 +1,6 @@
 ---
 title: "Eukdetect prevalence study (species)"
-author: "Laia Domingo Costa"
+author: "Laia Domingo Costa/Enrique Roig Tormo/Samuel Piquer-Esteban"
 format: html
 editor: visual
 ---
