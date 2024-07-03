@@ -1,0 +1,199 @@
+---
+title: "Stackedplot Blastocystis study"
+author: "Laia Domingo Costa/Enrique Roig Tormo/Samuel Piquer-Esteban"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(readr)
+library(ComplexHeatmap)
+library(dplyr)
+library(RColorBrewer)
+library(ggplot2)
+library(reshape2)
+library(tidyverse)
+library(gridExtra)
+```
+
+## Load data
+
+```{r}
+metadata = read.csv("DATA/merged_NHP_7jun2024_concatenated_final_metadata.tsv", header = T, sep='\t', na.strings=c("","NA"))
+presence_absence_sp_table = read_delim("DATA/nhp_13jun2023_euk_presence_absence_species_table_def.tsv", delim = "\t", escape_double = FALSE, trim_ws = TRUE)
+taxonomy_sp_table = read_delim("DATA/nhp_13jun2024_euk_taxonomy_species_table.tsv", delim = "\t", escape_double = FALSE, trim_ws = TRUE)
+```
+
+## Tables by individual
+
+### Presence-absence tables
+
+```{r}
+#Add individual column
+presence_absence_sp_table_ind = merge(metadata[,c("sample_name","individual_id")],presence_absence_sp_table,by.x="sample_name",by.y="Sample")
+#Drop sample name
+presence_absence_sp_table_ind = presence_absence_sp_table_ind[,!(names(presence_absence_sp_table_ind) %in% c("sample_name"))]
+#Sum values by individual
+appearences_by_ind_sp_table = presence_absence_sp_table_ind %>% group_by(individual_id) %>% summarise(across(everything(), sum), .groups = 'drop') %>% as.data.frame()
+#Get presence-absence table
+##Make copy to work on
+presence_absence_by_ind_sp_table = appearences_by_ind_sp_table
+##Update rownames
+rownames(presence_absence_by_ind_sp_table)=presence_absence_by_ind_sp_table$individual_id
+##Remove individuals column
+presence_absence_by_ind_sp_table[,1] <- NULL
+##Change all values > 0 to 1
+presence_absence_by_ind_sp_table[presence_absence_by_ind_sp_table>0] <- 1
+```
+
+### Metadata
+
+```{r}
+metadata_interest_4_ind = metadata[,c("individual_id","country","continent","host_specie","host_lifestyle","season","primate_group","primate_NCBI_taxonomy")]
+metadata_interest_4_ind$host_lifestyle = metadata_interest_4_ind$host_lifestyle %>% trimws
+metadata_ind_interest = metadata_interest_4_ind %>% group_by(individual_id) %>% summarise(across(everything(), unique), .groups = 'drop') %>% as.data.frame()
+```
+
+## Filter f1
+
+Filter by genus of interest (Blastocystis)
+
+```{r}
+genus_interest <- c("Blastocystis")
+taxonomy_sp_table_f1 <- taxonomy_sp_table[taxonomy_sp_table$genus %in% genus_interest, ]
+
+# Generate list with TaxIDs of interest
+list_taxids <- taxonomy_sp_table_f1$TaxID
+
+# Filter presence_absence_by_ind_sp_table_f1 by these TaxIDs
+presence_absence_by_ind_sp_table_f1 <- presence_absence_by_ind_sp_table[, colnames(presence_absence_by_ind_sp_table) %in% list_taxids]
+```
+
+## Combination 3 main variables
+
+```{r}
+#Number of unique combinations
+unique(paste(metadata_ind_interest$host_specie,metadata_ind_interest$host_lifestyle,metadata_ind_interest$country))
+length(unique(paste(metadata_ind_interest$host_specie, metadata_ind_interest$host_lifestyle,metadata_ind_interest$country)))
+```
+
+```{r}
+#Number of individuals per combination
+n_ind_by_comb = sort(table(paste(metadata_ind_interest$host_specie,"|",metadata_ind_interest$host_lifestyle,"|",metadata_ind_interest$country)))
+n_ind_by_comb
+```
+
+```{r}
+#TaxIDs by total individuals
+sort(colSums(presence_absence_by_ind_sp_table_f1))
+```
+
+```{r}
+#Number of genera by individual
+print("Summary of Number of genera by individual:")
+summary(rowSums(presence_absence_by_ind_sp_table_f1))
+#Quick Frecuency by individual
+print("Number of Individuals by Genera detected:")
+table(rowSums(presence_absence_by_ind_sp_table_f1))
+```
+
+## Filter f2
+
+Filter Combinations with low number of individuals (at least 5 individuals)
+
+```{r}
+#Get combs of interest
+combs_5_or_more = names(n_ind_by_comb)[n_ind_by_comb>=5]
+combs_5_or_more
+#Add combs column to metadata
+metadata_ind_interest$comb = paste(metadata_ind_interest$host_specie,"|",metadata_ind_interest$host_lifestyle,"|",metadata_ind_interest$country)
+#Merge comb column with presence_absence_by_ind_sp_table_f2
+presence_absence_by_ind_sp_table_f1_comb = merge(metadata_ind_interest[,c("individual_id","comb")],presence_absence_by_ind_sp_table_f1,by.y = 0, by.x = "individual_id")
+#Drop individuals column
+presence_absence_by_ind_sp_table_f1_comb = select(presence_absence_by_ind_sp_table_f1_comb, -individual_id)
+#Filter low ind combs
+presence_absence_by_ind_sp_table_f1_comb_f2 = presence_absence_by_ind_sp_table_f1_comb[presence_absence_by_ind_sp_table_f1_comb$comb %in% combs_5_or_more,]
+metadata_ind_interest = metadata_ind_interest[metadata_ind_interest$comb %in% combs_5_or_more,]
+```
+
+## Get prevalence table by comb
+
+```{r}
+#Mean in presence-absence data is equivalent to prevalence
+prevalence_table_ind_sp_f1_comb_f2 = presence_absence_by_ind_sp_table_f1_comb_f2 %>% group_by(comb) %>% summarise(across(where(is.numeric), mean), .groups = 'drop') %>% as.data.frame()
+```
+
+```{r}
+## Quick exploration of max prevalence values
+print("Max prevalence values per taxid")
+head(sort(apply(prevalence_table_ind_sp_f1_comb_f2, 2, max)), -1)
+```
+
+## Format prevalence table
+
+```{r}
+#Change taxids for genus-name(taxid)
+final_tax_names=c()
+for (taxid in names(prevalence_table_ind_sp_f1_comb_f2)) {
+  temp_taxonomy = taxonomy_sp_table[taxonomy_sp_table$TaxID==taxid,]
+  temp_tax_name = paste(temp_taxonomy$species,'(',temp_taxonomy$TaxID,')',sep = "")
+  final_tax_names = c(final_tax_names, temp_tax_name)
+}
+names(prevalence_table_ind_sp_f1_comb_f2) <- final_tax_names
+colnames(prevalence_table_ind_sp_f1_comb_f2)[1] <- "Intersects"
+```
+
+## Get metadata of interest for combinations
+
+```{r}
+#Drop individuals columns
+metadata_combs = metadata_ind_interest
+metadata_combs$individual <- NULL
+#unique values per comb
+metadata_combs_uniq = metadata_combs %>% summarise(distinct(., comb, .keep_all = TRUE), .groups = 'drop') %>% arrange(comb) %>% as.data.frame()
+#Add number of individuals per comb
+#Check that the order matches (all true in this case)
+metadata_combs_uniq$n_individuals <- table(paste(metadata_ind_interest$host_specie,"|",metadata_ind_interest$host_lifestyle,"|",metadata_ind_interest$country))
+```
+
+## Generate final table prevalence by interest genus
+
+```{r}
+# Vector with new names columns
+names <- c("Species", "Prevalence")
+
+# Use melt() function to convert a dataframe from a wide to long format
+prevalence_Blasto <- melt(prevalence_table_ind_sp_f1_comb_f2, id="Intersects")
+colnames(prevalence_Blasto)[c(2, 3)] <- names
+```
+
+## Stacked barchart Blastocystis
+
+```{r}
+prevalence_Blasto_f1 <- prevalence_Blasto %>% filter(Prevalence != 0)
+
+Species = prevalence_Blasto_f1$Species
+Conditions = prevalence_Blasto_f1$Intersects
+Prevalence = prevalence_Blasto_f1$Prevalence
+
+ggplot(prevalence_Blasto_f1, aes(fill=Species, y=Conditions, x=Prevalence)) +
+  geom_bar(position="stack", stat="identity") + 
+  geom_text(aes(label = ifelse(Prevalence < 0.03, "", paste0(round(Prevalence*100, 1)))), 
+            position = position_stack(vjust = 0.5), colour = "white", size=13) +
+  scale_x_continuous(labels = scales::number_format(scale = 100), limits = c(0, 1.6), 
+                     breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6)) +
+  labs(x = "Prevalence (%)", y = "Conditions") + 
+  theme(axis.text.y = element_text(size = 45),
+                      axis.title.y = element_text(size = 50),
+                      axis.text.x = element_text(size = 40),
+                      axis.title.x = element_text(size = 50, margin = margin(t = 40)),
+                      legend.text = element_text(size = 43),
+                      legend.title = element_text(size = 43),
+                      legend.position = "bottom",
+                      legend.margin = margin(t = 50)) +
+  guides(fill = guide_legend(nrow = 4, byrow = TRUE))
+  
+ggsave("Graficas/Stacked_Barchart_Blastocystis.png", height = 45,width = 45)
+```
