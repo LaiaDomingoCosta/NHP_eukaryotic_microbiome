@@ -1,6 +1,6 @@
 ---
 title: "Comparation Eukdetect VS Metaphlan"
-author: "Laia Domingo Costa"
+author: "Laia Domingo Costa/Enrique Roig Tormo/Samuel Piquer-Esteban"
 format: html
 editor: visual
 ---
